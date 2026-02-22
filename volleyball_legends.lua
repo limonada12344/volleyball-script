@@ -47,7 +47,7 @@ local Config = {
     
     -- Hitbox
     HitboxEnabled = false,
-    HitboxSize = 8, -- Tamanho da hitbox (não exagere!)
+    HitboxSize = 15, -- Tamanho da hitbox (padrão: 15)
     HitboxTransparency = 0.7,
     
     -- ESP
@@ -95,24 +95,39 @@ function Utils:HumanWait()
     end
 end
 
+-- Cache da bola para não procurar toda hora
+local cachedBall = nil
+local lastBallCheck = 0
+
 function Utils:GetBall()
+    -- Verificar cache (atualiza a cada 1 segundo)
+    local currentTime = tick()
+    if cachedBall and cachedBall.Parent and (currentTime - lastBallCheck) < 1 then
+        return cachedBall
+    end
+    
+    lastBallCheck = currentTime
+    
     -- Procurar pela bola no workspace
     local ball = Workspace:FindFirstChild("Ball") or 
                  Workspace:FindFirstChild("Volleyball") or
-                 Workspace:FindFirstChild("ball")
+                 Workspace:FindFirstChild("ball") or
+                 Workspace:FindFirstChild("VolleyBall")
     
     if not ball then
         -- Procurar em outros lugares comuns
         for _, obj in pairs(Workspace:GetDescendants()) do
-            if obj:IsA("Part") and (
+            if obj:IsA("BasePart") and (
                 obj.Name:lower():find("ball") or
                 obj.Name:lower():find("volley")
             ) then
-                return obj
+                ball = obj
+                break
             end
         end
     end
     
+    cachedBall = ball
     return ball
 end
 
@@ -215,44 +230,77 @@ function ESP:UpdatePlayerESP()
     end
 end
 
--- Sistema de Hitbox
+-- Sistema de Hitbox (MELHORADO)
 local Hitbox = {}
 Hitbox.OriginalSizes = {}
+Hitbox.OriginalTransparency = {}
+Hitbox.OriginalCanCollide = {}
 
 function Hitbox:Expand(part, size)
-    if not part or not part:IsA("BasePart") then return end
+    if not part or not part:IsA("BasePart") or not part.Parent then 
+        return 
+    end
     
-    -- Salvar tamanho original
+    -- Salvar propriedades originais (apenas uma vez)
     if not self.OriginalSizes[part] then
         self.OriginalSizes[part] = part.Size
+        self.OriginalTransparency[part] = part.Transparency
+        self.OriginalCanCollide[part] = part.CanCollide
+        
+        -- Debug: confirmar que salvou
+        print("✅ Hitbox salvo - Tamanho original:", part.Size)
     end
     
     -- Expandir hitbox
     part.Size = Vector3.new(size, size, size)
     part.Transparency = Config.HitboxTransparency
     part.CanCollide = false
+    
+    -- Debug: confirmar expansão
+    if not part:FindFirstChild("HitboxMarker") then
+        print("✅ Hitbox expandido para:", size)
+        local marker = Instance.new("BoolValue")
+        marker.Name = "HitboxMarker"
+        marker.Parent = part
+    end
 end
 
 function Hitbox:Restore(part)
     if not part or not self.OriginalSizes[part] then return end
     
+    -- Restaurar propriedades originais
     part.Size = self.OriginalSizes[part]
-    part.Transparency = 0
+    part.Transparency = self.OriginalTransparency[part] or 0
+    part.CanCollide = self.OriginalCanCollide[part] or false
+    
+    -- Limpar cache
     self.OriginalSizes[part] = nil
+    self.OriginalTransparency[part] = nil
+    self.OriginalCanCollide[part] = nil
+    
+    -- Remover marker
+    local marker = part:FindFirstChild("HitboxMarker")
+    if marker then
+        marker:Destroy()
+    end
 end
 
 function Hitbox:Update()
     if not Config.HitboxEnabled then
         -- Restaurar todos
         for part, _ in pairs(self.OriginalSizes) do
-            self:Restore(part)
+            pcall(function()
+                self:Restore(part)
+            end)
         end
         return
     end
     
     local ball = Utils:GetBall()
-    if ball then
-        self:Expand(ball, Config.HitboxSize)
+    if ball and ball.Parent then
+        pcall(function()
+            self:Expand(ball, Config.HitboxSize)
+        end)
     end
 end
 
@@ -378,24 +426,36 @@ local function setupAntiAFK()
     print("✅ Anti-AFK ativado")
 end
 
--- Loop principal
+-- Loop principal (OTIMIZADO)
 local function mainLoop()
-    RunService.Heartbeat:Connect(function()
-        -- Atualizar sistemas
-        pcall(function()
-            Aimbot:Update()
-            Hitbox:Update()
-            ESP:UpdateBallESP()
-            ESP:UpdatePlayerESP()
-        end)
+    -- Loop principal mais lento para não travar
+    spawn(function()
+        while wait(0.1) do -- Reduzido de Heartbeat para 0.1s
+            pcall(function()
+                if Config.AimbotEnabled then
+                    Aimbot:Update()
+                end
+                if Config.HitboxEnabled then
+                    Hitbox:Update()
+                end
+                if Config.BallESPEnabled or Config.PlayerESPEnabled then
+                    ESP:UpdateBallESP()
+                    ESP:UpdatePlayerESP()
+                end
+            end)
+        end
     end)
     
-    -- Loop de auto features (mais lento)
+    -- Loop de auto features (ainda mais lento)
     spawn(function()
         while wait(0.5) do
             pcall(function()
-                Auto:Serve()
-                Auto:Block()
+                if Config.AutoServeEnabled then
+                    Auto:Serve()
+                end
+                if Config.AutoBlockEnabled then
+                    Auto:Block()
+                end
             end)
         end
     end)
