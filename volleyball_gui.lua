@@ -357,9 +357,9 @@ createToggle("Predição", "Prever onde a bola vai estar", Config.AimbotPredicti
 end)
 
 -- Seção: Hitbox
-createSection("📦 HITBOX")
+createSection("📦 HITBOX EXTENDER")
 
-createToggle("Hitbox Extender", "Aumentar área de acerto", Config.HitboxEnabled, function(value)
+createToggle("Hitbox Extender", "Aumentar área de acerto da bola", Config.HitboxEnabled, function(value)
     Config.HitboxEnabled = value
     print("Hitbox:", value)
 end)
