@@ -97,6 +97,7 @@ end
 
 -- Cache da bola para não procurar toda hora
 local cachedBall = nil
+local cachedHitbox = nil
 local lastBallCheck = 0
 
 function Utils:GetBall()
@@ -108,27 +109,46 @@ function Utils:GetBall()
     
     lastBallCheck = currentTime
     
-    -- Procurar pela bola no workspace
+    -- PRIORIDADE 1: Procurar Ball_Hitbox (o hitbox real do jogo!)
+    local hitbox = Workspace:FindFirstChild("Ball_Hitbox", true)
+    if hitbox and hitbox:IsA("BasePart") then
+        cachedHitbox = hitbox
+        cachedBall = hitbox
+        print("✅ Ball_Hitbox encontrado!")
+        return hitbox
+    end
+    
+    -- PRIORIDADE 2: Procurar pela bola visual
     local ball = Workspace:FindFirstChild("Ball") or 
                  Workspace:FindFirstChild("Volleyball") or
                  Workspace:FindFirstChild("ball") or
                  Workspace:FindFirstChild("VolleyBall")
     
     if not ball then
-        -- Procurar em outros lugares comuns
+        -- Procurar em descendentes
         for _, obj in pairs(Workspace:GetDescendants()) do
-            if obj:IsA("BasePart") and (
-                obj.Name:lower():find("ball") or
-                obj.Name:lower():find("volley")
-            ) then
-                ball = obj
-                break
+            if obj:IsA("BasePart") then
+                local name = obj.Name:lower()
+                if name:find("ball") and name:find("hitbox") then
+                    -- Encontrou hitbox!
+                    cachedHitbox = obj
+                    cachedBall = obj
+                    print("✅ Hitbox da bola encontrado:", obj.Name)
+                    return obj
+                elseif name:find("ball") or name:find("volley") then
+                    ball = obj
+                end
             end
         end
     end
     
     cachedBall = ball
     return ball
+end
+
+function Utils:GetBallHitbox()
+    -- Retorna o hitbox se existir, senão retorna a bola
+    return cachedHitbox or self:GetBall()
 end
 
 function Utils:PredictBallPosition(ball, time)
@@ -206,7 +226,7 @@ function ESP:UpdateBallESP()
         -- Remover apenas ESP da bola
         for obj, highlight in pairs(self.Objects) do
             if not obj:IsA("Player") then
-                highlight:Destroy()
+                pcall(function() highlight:Destroy() end)
                 self.Objects[obj] = nil
             end
         end
@@ -214,8 +234,17 @@ function ESP:UpdateBallESP()
     end
     
     local ball = Utils:GetBall()
-    if ball and not self.Objects[ball] then
-        self:CreateBallESP(ball)
+    if ball then
+        -- Se já existe, garantir que a cor está correta
+        if self.Objects[ball] then
+            pcall(function()
+                self.Objects[ball].FillColor = Color3.fromRGB(255, 255, 0)
+                self.Objects[ball].OutlineColor = Color3.fromRGB(255, 200, 0)
+            end)
+        else
+            -- Criar novo ESP
+            self:CreateBallESP(ball)
+        end
     end
 end
 
@@ -237,68 +266,57 @@ function ESP:UpdatePlayerESP()
     end
 end
 
--- Sistema de Hitbox (FORÇADO - FUNCIONA!)
+-- Sistema de Hitbox (MÉTODO CORRETO - USA BALL_HITBOX)
 local Hitbox = {}
 Hitbox.OriginalSizes = {}
 Hitbox.OriginalTransparency = {}
 Hitbox.OriginalCanCollide = {}
 Hitbox.Connection = nil
 
-function Hitbox:Expand(part, size)
-    if not part or not part:IsA("BasePart") or not part.Parent then 
-        return false
-    end
-    
-    -- Salvar propriedades originais (apenas uma vez)
-    if not self.OriginalSizes[part] then
-        self.OriginalSizes[part] = part.Size
-        self.OriginalTransparency[part] = part.Transparency
-        self.OriginalCanCollide[part] = part.CanCollide
-        
-        print("✅ Hitbox salvo - Bola:", part.Name, "| Tamanho original:", part.Size)
-    end
-    
-    -- FORÇAR o tamanho (o jogo tenta reverter, mas vamos forçar sempre)
-    part.Size = Vector3.new(size, size, size)
-    part.Transparency = Config.HitboxTransparency
-    part.CanCollide = false
-    part.Massless = true
-    
-    return true
-end
-
-function Hitbox:Restore(part)
-    if not part or not self.OriginalSizes[part] then return end
-    
-    -- Restaurar propriedades originais
-    part.Size = self.OriginalSizes[part]
-    part.Transparency = self.OriginalTransparency[part] or 0
-    part.CanCollide = self.OriginalCanCollide[part] or false
-    
-    -- Limpar cache
-    self.OriginalSizes[part] = nil
-    self.OriginalTransparency[part] = nil
-    self.OriginalCanCollide[part] = nil
-end
-
 function Hitbox:Start()
     if self.Connection then return end
     
-    -- Conectar ao Heartbeat para FORÇAR o hitbox a cada frame
-    self.Connection = RunService.Heartbeat:Connect(function()
+    print("🎯 Iniciando Hitbox Extender...")
+    
+    -- Usar RenderStepped para máxima prioridade
+    self.Connection = RunService.RenderStepped:Connect(function()
         if not Config.HitboxEnabled then return end
         
+        -- Procurar BALL_HITBOX primeiro (o hitbox real do jogo!)
+        local hitbox = Workspace:FindFirstChild("Ball_Hitbox", true)
         local ball = Utils:GetBall()
-        if ball and ball.Parent then
-            -- Forçar o tamanho a cada frame
-            ball.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-            ball.Transparency = Config.HitboxTransparency
-            ball.CanCollide = false
-            ball.Massless = true
+        
+        -- Priorizar o Ball_Hitbox se existir
+        local targetPart = hitbox or ball
+        
+        if not targetPart or not targetPart.Parent then return end
+        
+        -- Salvar original apenas uma vez
+        if not self.OriginalSizes[targetPart] then
+            self.OriginalSizes[targetPart] = targetPart.Size
+            self.OriginalTransparency[targetPart] = targetPart.Transparency
+            self.OriginalCanCollide[targetPart] = targetPart.CanCollide
+            print("✅ Hitbox encontrado:", targetPart.Name)
+            print("📏 Tamanho original:", targetPart.Size)
         end
+        
+        -- FORÇAR propriedades a cada frame
+        pcall(function()
+            targetPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
+            targetPart.Transparency = Config.HitboxTransparency
+            targetPart.CanCollide = true
+            targetPart.Massless = true
+            
+            -- Desabilitar scripts que podem resetar
+            for _, script in pairs(targetPart:GetChildren()) do
+                if script:IsA("Script") or script:IsA("LocalScript") then
+                    script.Disabled = true
+                end
+            end
+        end)
     end)
     
-    print("✅ Hitbox forçado ativado!")
+    print("✅ Hitbox ativado! Tamanho:", Config.HitboxSize)
 end
 
 function Hitbox:Stop()
@@ -310,9 +328,23 @@ function Hitbox:Stop()
     -- Restaurar todos
     for part, _ in pairs(self.OriginalSizes) do
         pcall(function()
-            self:Restore(part)
+            part.Size = self.OriginalSizes[part]
+            part.Transparency = self.OriginalTransparency[part] or 0
+            part.CanCollide = self.OriginalCanCollide[part] or false
+            
+            -- Reativar scripts
+            for _, script in pairs(part:GetChildren()) do
+                if script:IsA("Script") or script:IsA("LocalScript") then
+                    script.Disabled = false
+                end
+            end
         end)
     end
+    
+    -- Limpar cache
+    self.OriginalSizes = {}
+    self.OriginalTransparency = {}
+    self.OriginalCanCollide = {}
     
     print("❌ Hitbox desativado")
 end
@@ -447,49 +479,58 @@ local function setupAntiAFK()
     print("✅ Anti-AFK ativado")
 end
 
--- Loop principal (OTIMIZADO - SEM PISCAR)
+-- Loop principal (SUPER OTIMIZADO - SEM LAG)
 local function mainLoop()
-    -- Loop de Hitbox (FORÇADO a cada frame)
-    -- Não precisa de loop separado, usa Heartbeat interno
-    
-    -- Loop de Aimbot (frequente)
+    -- Loop de Aimbot (moderado - 20 FPS)
     spawn(function()
         while wait(0.05) do
-            pcall(function()
-                if Config.AimbotEnabled then
+            if Config.AimbotEnabled then
+                pcall(function()
                     Aimbot:Update()
-                end
-            end)
+                end)
+            else
+                wait(0.5) -- Esperar mais quando desativado
+            end
         end
     end)
     
-    -- Loop de ESP (menos frequente para não piscar)
+    -- Loop de ESP (lento - atualiza a cada 2 segundos para não piscar)
     spawn(function()
-        while wait(1) do -- 1 segundo para não piscar
-            pcall(function()
-                if Config.BallESPEnabled then
-                    ESP:UpdateBallESP()
-                end
-                if Config.PlayerESPEnabled then
-                    ESP:UpdatePlayerESP()
-                end
-            end)
+        while wait(2) do
+            if Config.BallESPEnabled or Config.PlayerESPEnabled then
+                pcall(function()
+                    if Config.BallESPEnabled then
+                        ESP:UpdateBallESP()
+                    end
+                    if Config.PlayerESPEnabled then
+                        ESP:UpdatePlayerESP()
+                    end
+                end)
+            else
+                wait(3) -- Esperar mais quando desativado
+            end
         end
     end)
     
-    -- Loop de auto features (lento)
+    -- Loop de auto features (muito lento)
     spawn(function()
-        while wait(0.5) do
-            pcall(function()
-                if Config.AutoServeEnabled then
-                    Auto:Serve()
-                end
-                if Config.AutoBlockEnabled then
-                    Auto:Block()
-                end
-            end)
+        while wait(1) do
+            if Config.AutoServeEnabled or Config.AutoBlockEnabled then
+                pcall(function()
+                    if Config.AutoServeEnabled then
+                        Auto:Serve()
+                    end
+                    if Config.AutoBlockEnabled then
+                        Auto:Block()
+                    end
+                end)
+            else
+                wait(2) -- Esperar mais quando desativado
+            end
         end
     end)
+    
+    print("✅ Loops otimizados iniciados")
 end
 
 -- Notificações
