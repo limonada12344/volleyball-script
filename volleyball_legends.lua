@@ -1,17 +1,12 @@
 --[[
-    VOLLEYBALL LEGENDS - LEGIT SCRIPT
-    Versão: 1.0.0
-    Executor: Velocity / Xeno
+    VOLLEYBALL LEGENDS - SPRING SYSTEM
+    Versão: 4.0.0 - DEFINITIVA
+    Sistema: Spring Physics (Lei de Hooke)
     
-    Funcionalidades:
-    - Aimbot Dive (Legit)
-    - Hitbox Extender
-    - Ball ESP
-    - Player ESP
-    - Auto Serve
-    - Auto Block
-    - Prediction
-    - Anti-AFK
+    ESTE É O MÉTODO QUE O STERLING USA!
+    
+    Movimento SUAVE e NATURAL usando física de mola.
+    Muito melhor que força bruta!
 ]]
 
 -- Verificar se já está carregado
@@ -23,7 +18,7 @@ end
 _G.VolleyballLegendsLoaded = true
 
 print("╔════════════════════════════════════╗")
-print("║   VOLLEYBALL LEGENDS - LOADING...  ║")
+print("║   VOLLEYBALL LEGENDS - SPRING      ║")
 print("╚════════════════════════════════════╝")
 
 -- Serviços
@@ -37,18 +32,109 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
+-- ═══════════════════════════════════════════════════════════
+-- SPRING SYSTEM (Lei de Hooke)
+-- ═══════════════════════════════════════════════════════════
+local Spring = {}
+Spring.__index = Spring
+
+function Spring.new(initial)
+    local p0 = initial or Vector3.zero
+    
+    return setmetatable({
+        _clock = tick,
+        _time0 = tick(),
+        _position0 = p0,
+        _velocity0 = Vector3.zero,
+        _target = p0,
+        _damper = 1,
+        _speed = 1,
+    }, Spring)
+end
+
+function Spring:_positionVelocity(now)
+    local p0 = self._position0
+    local v0 = self._velocity0
+    local p1 = self._target
+    local d = self._damper
+    local s = self._speed
+    
+    local t = s * (now - self._time0)
+    local d2 = d * d
+    
+    local h, si, co
+    if d2 < 1 then
+        h = math.sqrt(1 - d2)
+        local ep = math.exp(-d * t) / h
+        co, si = ep * math.cos(h * t), ep * math.sin(h * t)
+    elseif d2 == 1 then
+        h = 1
+        local ep = math.exp(-d * t) / h
+        co, si = ep, ep * t
+    else
+        h = math.sqrt(d2 - 1)
+        local u = math.exp((-d + h) * t) / (2 * h)
+        local v = math.exp((-d - h) * t) / (2 * h)
+        co, si = u + v, u - v
+    end
+    
+    local a0 = h * co + d * si
+    local a1 = 1 - (h * co + d * si)
+    local a2 = si / s
+    
+    local b0 = -s * si
+    local b1 = s * si
+    local b2 = h * co - d * si
+    
+    return a0 * p0 + a1 * p1 + a2 * v0,
+           b0 * p0 + b1 * p1 + b2 * v0
+end
+
+function Spring:SetTarget(value)
+    local now = tick()
+    local position, velocity = self:_positionVelocity(now)
+    self._position0 = position
+    self._velocity0 = velocity
+    self._target = value
+    self._time0 = now
+end
+
+function Spring:GetPosition()
+    local position, _ = self:_positionVelocity(tick())
+    return position
+end
+
+function Spring:SetSpeed(speed)
+    local now = tick()
+    local position, velocity = self:_positionVelocity(now)
+    self._position0 = position
+    self._velocity0 = velocity
+    self._speed = math.max(0, speed)
+    self._time0 = now
+end
+
+function Spring:SetDamper(damper)
+    local now = tick()
+    local position, velocity = self:_positionVelocity(now)
+    self._position0 = position
+    self._velocity0 = velocity
+    self._damper = damper
+    self._time0 = now
+end
+
 -- Configurações
 local Config = {
     -- Aimbot
     AimbotEnabled = false,
     AimbotFOV = 200,
-    AimbotSmoothing = 0.15, -- Quanto maior, mais suave (legit)
+    AimbotSmoothing = 0.15,
     AimbotPrediction = true,
     
-    -- Hitbox
+    -- Hitbox (Spring)
     HitboxEnabled = false,
-    HitboxSize = 15, -- Tamanho da hitbox
-    HitboxTransparency = 0.7,
+    HitboxSize = 15,
+    HitboxSpeed = 20, -- Velocidade da mola (quanto maior, mais rápido)
+    HitboxDamper = 0.5, -- Amortecimento (< 1 = bounce, 1 = crítico, > 1 = lento)
     
     -- ESP
     BallESPEnabled = false,
@@ -58,7 +144,7 @@ local Config = {
     -- Auto Features
     AutoServeEnabled = false,
     AutoBlockEnabled = false,
-    AutoBlockTiming = 0.3, -- Delay antes de bloquear
+    AutoBlockTiming = 0.3,
     
     -- Misc
     AntiAFK = true,
@@ -95,12 +181,11 @@ function Utils:HumanWait()
     end
 end
 
--- Cache da bola para não procurar toda hora
+-- Cache da bola
 local cachedBall = nil
 local lastBallCheck = 0
 
 function Utils:GetBall()
-    -- Verificar cache (atualiza a cada 1 segundo)
     local currentTime = tick()
     if cachedBall and cachedBall.Parent and (currentTime - lastBallCheck) < 1 then
         return cachedBall
@@ -108,14 +193,12 @@ function Utils:GetBall()
     
     lastBallCheck = currentTime
     
-    -- Procurar pela bola no workspace
     local ball = Workspace:FindFirstChild("Ball") or 
                  Workspace:FindFirstChild("Volleyball") or
                  Workspace:FindFirstChild("ball") or
                  Workspace:FindFirstChild("VolleyBall")
     
     if not ball then
-        -- Procurar em descendentes
         for _, obj in pairs(Workspace:GetDescendants()) do
             if obj:IsA("BasePart") and (
                 obj.Name:lower():find("ball") or
@@ -137,8 +220,8 @@ function Utils:PredictBallPosition(ball, time)
     local velocity = ball.AssemblyLinearVelocity or ball.Velocity
     local currentPos = ball.Position
     
-    -- Prever posição futura
-    local predictedPos = currentPos + (velocity * time)
+    local gravity = Vector3.new(0, -196.2, 0)
+    local predictedPos = currentPos + (velocity * time) + (0.5 * gravity * time * time)
     
     return predictedPos
 end
@@ -203,7 +286,6 @@ end
 
 function ESP:UpdateBallESP()
     if not Config.BallESPEnabled then
-        -- Remover apenas ESP da bola
         for obj, highlight in pairs(self.Objects) do
             if not obj:IsA("Player") then
                 pcall(function() highlight:Destroy() end)
@@ -215,14 +297,12 @@ function ESP:UpdateBallESP()
     
     local ball = Utils:GetBall()
     if ball then
-        -- Se já existe, garantir que a cor está correta
         if self.Objects[ball] then
             pcall(function()
                 self.Objects[ball].FillColor = Color3.fromRGB(255, 255, 0)
                 self.Objects[ball].OutlineColor = Color3.fromRGB(255, 200, 0)
             end)
         else
-            -- Criar novo ESP
             self:CreateBallESP(ball)
         end
     end
@@ -230,7 +310,6 @@ end
 
 function ESP:UpdatePlayerESP()
     if not Config.PlayerESPEnabled then
-        -- Remover apenas ESP de jogadores
         for player, _ in pairs(ESP.Objects) do
             if player:IsA("Player") then
                 self:RemoveESP(player)
@@ -246,17 +325,27 @@ function ESP:UpdatePlayerESP()
     end
 end
 
--- Sistema de Hitbox (MAGNETISMO AGRESSIVO - IGUAL STERLING)
+-- Sistema de Hitbox SPRING (DEFINITIVO!)
 local Hitbox = {}
 Hitbox.Connection = nil
+Hitbox.PositionSpring = nil
 
 function Hitbox:Start()
     if self.Connection then return end
     
-    print("🎯 Iniciando Hitbox Extender (Magnetismo Agressivo)...")
+    print("🎯 Iniciando Hitbox Extender SPRING...")
+    print("💡 Usando física de mola (Lei de Hooke)")
     
-    -- Usar Heartbeat para movimento suave
-    self.Connection = RunService.Heartbeat:Connect(function()
+    -- Criar spring para posição suave
+    local hrp = Utils:GetRootPart()
+    if hrp then
+        self.PositionSpring = Spring.new(hrp.Position)
+        self.PositionSpring:SetSpeed(Config.HitboxSpeed)
+        self.PositionSpring:SetDamper(Config.HitboxDamper)
+    end
+    
+    -- Usar RenderStepped para máxima suavidade
+    self.Connection = RunService.RenderStepped:Connect(function()
         if not Config.HitboxEnabled then return end
         
         local char = Utils:GetCharacter()
@@ -271,40 +360,55 @@ function Hitbox:Start()
         -- Calcular distância
         local distance = (ball.Position - hrp.Position).Magnitude
         
-        -- Raio de ação baseado no slider (quanto maior, mais longe funciona)
-        local actionRadius = Config.HitboxSize
+        -- Raio de ação (slider * 4 para bom alcance)
+        local actionRadius = Config.HitboxSize * 4
         
         -- Se a bola está dentro do raio
-        if distance <= actionRadius and distance > 1 then
-            -- Direção da bola
-            local direction = (ball.Position - hrp.Position).Unit
+        if distance <= actionRadius and distance > 2 then
+            -- Predição: onde a bola VAI estar
+            local targetPos = ball.Position
+            local predictedPos = Utils:PredictBallPosition(ball, 0.15)
+            if predictedPos then
+                targetPos = predictedPos
+            end
             
-            -- FORÇA DO PUXÃO (ajustável)
-            -- Quanto mais perto da bola, mais forte o puxão
-            local pullStrength = math.clamp((actionRadius - distance) / actionRadius, 0, 1)
+            -- Calcular posição alvo (perto da bola)
+            local direction = (targetPos - hrp.Position).Unit
+            local desiredPos = targetPos - (direction * 3) -- 3 studs da bola
             
-            -- Multiplicador de força (quanto maior, mais agressivo)
-            local forceMultiplier = 2.5
+            -- Atualizar spring target
+            if not self.PositionSpring then
+                self.PositionSpring = Spring.new(hrp.Position)
+                self.PositionSpring:SetSpeed(Config.HitboxSpeed)
+                self.PositionSpring:SetDamper(Config.HitboxDamper)
+            end
             
-            -- Calcular movimento
-            local movement = direction * pullStrength * forceMultiplier
+            self.PositionSpring:SetTarget(desiredPos)
             
-            -- APLICAR MOVIMENTO (múltiplos métodos para garantir)
+            -- Obter posição suave do spring
+            local smoothPos = self.PositionSpring:GetPosition()
+            
+            -- Aplicar movimento SUAVE
             pcall(function()
-                -- Método 1: CFrame (mais suave)
-                hrp.CFrame = hrp.CFrame + movement
+                -- Movimento suave via spring
+                hrp.CFrame = CFrame.new(smoothPos)
                 
-                -- Método 2: Velocity (mais natural)
-                if distance < actionRadius / 2 then
-                    hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity + (movement * 10)
-                end
+                -- Velocity adicional para ajudar
+                local velocityDir = (smoothPos - hrp.Position).Unit
+                hrp.AssemblyLinearVelocity = velocityDir * Config.HitboxSpeed
             end)
+        else
+            -- Fora do raio: spring volta para posição atual
+            if self.PositionSpring then
+                self.PositionSpring:SetTarget(hrp.Position)
+            end
         end
     end)
     
-    print("✅ Hitbox ativado! Raio:", Config.HitboxSize)
-    print("💡 Modo: Magnetismo Agressivo (puxa você para a bola)")
-    print("� Quanto maior o slider, maior o alcance!")
+    print("✅ Hitbox SPRING ativado!")
+    print("📏 Raio:", Config.HitboxSize * 4, "studs")
+    print("⚡ Speed:", Config.HitboxSpeed, "| Damper:", Config.HitboxDamper)
+    print("🌊 Movimento SUAVE e NATURAL!")
 end
 
 function Hitbox:Stop()
@@ -312,6 +416,8 @@ function Hitbox:Stop()
         self.Connection:Disconnect()
         self.Connection = nil
     end
+    
+    self.PositionSpring = nil
     
     print("❌ Hitbox desativado")
 end
@@ -324,6 +430,14 @@ function Hitbox:Update()
     end
 end
 
+function Hitbox:UpdateSettings()
+    if self.PositionSpring then
+        self.PositionSpring:SetSpeed(Config.HitboxSpeed)
+        self.PositionSpring:SetDamper(Config.HitboxDamper)
+        print("🔧 Spring atualizado: Speed =", Config.HitboxSpeed, "| Damper =", Config.HitboxDamper)
+    end
+end
+
 -- Sistema de Aimbot
 local Aimbot = {}
 Aimbot.Target = nil
@@ -333,7 +447,6 @@ function Aimbot:GetTarget()
     
     if not ball then return nil end
     
-    -- Verificar se está no FOV
     if not Utils:IsInFOV(ball.Position, Config.AimbotFOV) then
         return nil
     end
@@ -349,7 +462,6 @@ function Aimbot:AimAt(target)
     
     local targetPos = target.Position
     
-    -- Aplicar predição
     if Config.AimbotPrediction then
         local predictedPos = Utils:PredictBallPosition(target, 0.2)
         if predictedPos then
@@ -357,15 +469,12 @@ function Aimbot:AimAt(target)
         end
     end
     
-    -- Calcular direção
     local direction = (targetPos - rootPart.Position).Unit
     local targetCFrame = CFrame.new(rootPart.Position, rootPart.Position + direction)
     
-    -- Aplicar suavização (legit)
     local currentCFrame = rootPart.CFrame
     local smoothedCFrame = currentCFrame:Lerp(targetCFrame, Config.AimbotSmoothing)
     
-    -- Aplicar rotação
     rootPart.CFrame = CFrame.new(rootPart.Position) * (smoothedCFrame - smoothedCFrame.Position)
 end
 
@@ -385,17 +494,13 @@ local Auto = {}
 function Auto:Serve()
     if not Config.AutoServeEnabled then return end
     
-    -- Implementar lógica de auto serve
-    -- Isso depende de como o jogo funciona
     Utils:HumanWait()
     
-    -- Exemplo genérico:
     local args = {
         [1] = "Serve"
     }
     
     pcall(function()
-        -- Procurar pelo remote de serve
         local remote = ReplicatedStorage:FindFirstChild("ServeRemote") or
                       ReplicatedStorage:FindFirstChild("Serve")
         
@@ -414,13 +519,11 @@ function Auto:Block()
     local rootPart = Utils:GetRootPart()
     if not rootPart then return end
     
-    -- Verificar distância
     local distance = (ball.Position - rootPart.Position).Magnitude
     
-    if distance < 15 then -- Distância para bloquear
-        wait(Config.AutoBlockTiming) -- Delay humanizado
+    if distance < 15 then
+        wait(Config.AutoBlockTiming)
         
-        -- Disparar remote de block
         pcall(function()
             local remote = ReplicatedStorage:FindFirstChild("BlockRemote") or
                           ReplicatedStorage:FindFirstChild("Block")
@@ -432,23 +535,35 @@ function Auto:Block()
     end
 end
 
--- Anti-AFK
+-- Anti-AFK (Napoleon Style)
 local function setupAntiAFK()
     if not Config.AntiAFK then return end
     
-    local VirtualUser = game:GetService("VirtualUser")
-    
-    LocalPlayer.Idled:Connect(function()
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-    end)
-    
-    print("✅ Anti-AFK ativado")
+    local getconnections = getconnections or get_signal_cons
+    if getconnections then
+        for i, v in pairs(getconnections(LocalPlayer.Idled)) do
+            if v["Disable"] then
+                v["Disable"](v)
+            elseif v["Disconnect"] then
+                v["Disconnect"](v)
+            end
+        end
+        print("✅ Anti-AFK ativado (Napoleon Style)")
+    else
+        local VirtualUser = game:GetService("VirtualUser")
+        
+        LocalPlayer.Idled:Connect(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end)
+        
+        print("✅ Anti-AFK ativado (VirtualUser)")
+    end
 end
 
--- Loop principal (SUPER OTIMIZADO - SEM LAG)
+-- Loop principal
 local function mainLoop()
-    -- Loop de Aimbot (moderado - 20 FPS)
+    -- Loop de Aimbot
     spawn(function()
         while wait(0.05) do
             if Config.AimbotEnabled then
@@ -456,12 +571,12 @@ local function mainLoop()
                     Aimbot:Update()
                 end)
             else
-                wait(0.5) -- Esperar mais quando desativado
+                wait(0.5)
             end
         end
     end)
     
-    -- Loop de ESP (lento - atualiza a cada 2 segundos para não piscar)
+    -- Loop de ESP
     spawn(function()
         while wait(2) do
             if Config.BallESPEnabled or Config.PlayerESPEnabled then
@@ -474,12 +589,12 @@ local function mainLoop()
                     end
                 end)
             else
-                wait(3) -- Esperar mais quando desativado
+                wait(3)
             end
         end
     end)
     
-    -- Loop de auto features (muito lento)
+    -- Loop de auto features
     spawn(function()
         while wait(1) do
             if Config.AutoServeEnabled or Config.AutoBlockEnabled then
@@ -492,7 +607,7 @@ local function mainLoop()
                     end
                 end)
             else
-                wait(2) -- Esperar mais quando desativado
+                wait(2)
             end
         end
     end)
@@ -511,21 +626,18 @@ end
 
 -- Inicialização
 local function initialize()
-    -- Configurar anti-AFK
     setupAntiAFK()
-    
-    -- Iniciar loop principal
     mainLoop()
     
-    -- Notificar sucesso
     notify(
         "Volleyball Legends",
-        "Script carregado! Pressione INSERT para abrir o menu.",
+        "Spring System carregado! Pressione INSERT.",
         5
     )
     
     print("╔════════════════════════════════════╗")
-    print("║   SCRIPT CARREGADO COM SUCESSO!    ║")
+    print("║   SPRING SYSTEM - CARREGADO!       ║")
+    print("║   Movimento SUAVE e NATURAL!       ║")
     print("╚════════════════════════════════════╝")
 end
 
