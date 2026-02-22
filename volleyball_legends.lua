@@ -246,20 +246,53 @@ function ESP:UpdatePlayerESP()
     end
 end
 
--- Sistema de Hitbox (MÉTODO CORRETO - EXPANDE A BOLA REAL)
+-- Sistema de Hitbox (FORÇADO AO MÁXIMO - SEM PIEDADE)
 local Hitbox = {}
 Hitbox.OriginalSize = nil
-Hitbox.OriginalTransparency = nil
-Hitbox.OriginalCanCollide = nil
+Hitbox.OriginalMeshScale = nil
 Hitbox.Connection = nil
 Hitbox.BallRef = nil
+Hitbox.ChangedConnection = nil
 
 function Hitbox:Start()
     if self.Connection then return end
     
-    print("🎯 Iniciando Hitbox Extender...")
+    print("🎯 Iniciando Hitbox Extender (MODO FORÇADO)...")
     
-    -- Usar RenderStepped para máxima prioridade e força
+    local function forceHitbox(ball)
+        if not ball or not ball.Parent then return end
+        
+        -- FORÇAR Size (hitbox)
+        ball.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
+        
+        -- FORÇAR propriedades de colisão
+        ball.CanCollide = true
+        ball.Massless = true
+        ball.Transparency = Config.HitboxTransparency
+        
+        -- FORÇAR CollisionFidelity
+        if ball:IsA("MeshPart") then
+            ball.CollisionFidelity = Enum.CollisionFidelity.Box
+        end
+        
+        -- Ajustar mesh visual se existir
+        local mesh = ball:FindFirstChildOfClass("SpecialMesh") or ball:FindFirstChildOfClass("Mesh")
+        if mesh and self.OriginalSize and self.OriginalMeshScale then
+            local scaleX = (self.OriginalSize.X / Config.HitboxSize) * self.OriginalMeshScale.X
+            local scaleY = (self.OriginalSize.Y / Config.HitboxSize) * self.OriginalMeshScale.Y
+            local scaleZ = (self.OriginalSize.Z / Config.HitboxSize) * self.OriginalMeshScale.Z
+            mesh.Scale = Vector3.new(scaleX, scaleY, scaleZ)
+        end
+        
+        -- DESABILITAR scripts que podem resetar
+        for _, script in pairs(ball:GetChildren()) do
+            if script:IsA("Script") or script:IsA("LocalScript") then
+                script.Disabled = true
+            end
+        end
+    end
+    
+    -- MÉTODO 1: RenderStepped (mais rápido, mais prioritário)
     self.Connection = RunService.RenderStepped:Connect(function()
         if not Config.HitboxEnabled then return end
         
@@ -273,28 +306,36 @@ function Hitbox:Start()
         if ball ~= self.BallRef then
             self.BallRef = ball
             self.OriginalSize = ball.Size
-            self.OriginalTransparency = ball.Transparency
-            self.OriginalCanCollide = ball.CanCollide
+            
+            local mesh = ball:FindFirstChildOfClass("SpecialMesh") or ball:FindFirstChildOfClass("Mesh")
+            if mesh then
+                self.OriginalMeshScale = mesh.Scale
+            end
+            
             print("✅ Bola encontrada:", ball.Name)
             print("📏 Tamanho original:", ball.Size)
+            
+            -- MÉTODO 2: Conectar ao Changed para forçar quando o jogo tentar resetar
+            if self.ChangedConnection then
+                self.ChangedConnection:Disconnect()
+            end
+            
+            self.ChangedConnection = ball:GetPropertyChangedSignal("Size"):Connect(function()
+                if Config.HitboxEnabled then
+                    task.wait() -- Esperar o jogo mudar
+                    forceHitbox(ball) -- Forçar de volta
+                end
+            end)
         end
         
-        -- FORÇAR expansão da bola REAL a cada frame
+        -- FORÇAR a cada frame
         pcall(function()
-            ball.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-            ball.Transparency = Config.HitboxTransparency
-            ball.CanCollide = true
-            ball.Massless = true
-            
-            -- Forçar CollisionFidelity para Box (mais simples = mais fácil acertar)
-            if ball:IsA("MeshPart") then
-                ball.CollisionFidelity = Enum.CollisionFidelity.Box
-            end
+            forceHitbox(ball)
         end)
     end)
     
-    print("✅ Hitbox ativado! Tamanho:", Config.HitboxSize)
-    print("💡 Forçando expansão da bola a cada frame")
+    print("✅ Hitbox FORÇADO ativado! Tamanho:", Config.HitboxSize)
+    print("💡 Forçando com RenderStepped + Changed event")
 end
 
 function Hitbox:Stop()
@@ -303,19 +344,37 @@ function Hitbox:Stop()
         self.Connection = nil
     end
     
+    if self.ChangedConnection then
+        self.ChangedConnection:Disconnect()
+        self.ChangedConnection = nil
+    end
+    
     -- Restaurar bola original
     if self.BallRef and self.BallRef.Parent and self.OriginalSize then
         pcall(function()
             self.BallRef.Size = self.OriginalSize
-            self.BallRef.Transparency = self.OriginalTransparency or 0
-            self.BallRef.CanCollide = self.OriginalCanCollide or false
+            self.BallRef.Transparency = 0
+            
+            -- Reativar scripts
+            for _, script in pairs(self.BallRef:GetChildren()) do
+                if script:IsA("Script") or script:IsA("LocalScript") then
+                    script.Disabled = false
+                end
+            end
+            
+            -- Restaurar mesh scale
+            if self.OriginalMeshScale then
+                local mesh = self.BallRef:FindFirstChildOfClass("SpecialMesh") or self.BallRef:FindFirstChildOfClass("Mesh")
+                if mesh then
+                    mesh.Scale = self.OriginalMeshScale
+                end
+            end
         end)
     end
     
     self.BallRef = nil
     self.OriginalSize = nil
-    self.OriginalTransparency = nil
-    self.OriginalCanCollide = nil
+    self.OriginalMeshScale = nil
     
     print("❌ Hitbox desativado")
 end
