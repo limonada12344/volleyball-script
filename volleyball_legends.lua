@@ -97,7 +97,6 @@ end
 
 -- Cache da bola para não procurar toda hora
 local cachedBall = nil
-local cachedHitbox = nil
 local lastBallCheck = 0
 
 function Utils:GetBall()
@@ -109,16 +108,7 @@ function Utils:GetBall()
     
     lastBallCheck = currentTime
     
-    -- PRIORIDADE 1: Procurar Ball_Hitbox (o hitbox real do jogo!)
-    local hitbox = Workspace:FindFirstChild("Ball_Hitbox", true)
-    if hitbox and hitbox:IsA("BasePart") then
-        cachedHitbox = hitbox
-        cachedBall = hitbox
-        print("✅ Ball_Hitbox encontrado!")
-        return hitbox
-    end
-    
-    -- PRIORIDADE 2: Procurar pela bola visual
+    -- Procurar pela bola no workspace
     local ball = Workspace:FindFirstChild("Ball") or 
                  Workspace:FindFirstChild("Volleyball") or
                  Workspace:FindFirstChild("ball") or
@@ -127,28 +117,18 @@ function Utils:GetBall()
     if not ball then
         -- Procurar em descendentes
         for _, obj in pairs(Workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then
-                local name = obj.Name:lower()
-                if name:find("ball") and name:find("hitbox") then
-                    -- Encontrou hitbox!
-                    cachedHitbox = obj
-                    cachedBall = obj
-                    print("✅ Hitbox da bola encontrado:", obj.Name)
-                    return obj
-                elseif name:find("ball") or name:find("volley") then
-                    ball = obj
-                end
+            if obj:IsA("BasePart") and (
+                obj.Name:lower():find("ball") or
+                obj.Name:lower():find("volley")
+            ) then
+                ball = obj
+                break
             end
         end
     end
     
     cachedBall = ball
     return ball
-end
-
-function Utils:GetBallHitbox()
-    -- Retorna o hitbox se existir, senão retorna a bola
-    return cachedHitbox or self:GetBall()
 end
 
 function Utils:PredictBallPosition(ball, time)
@@ -266,57 +246,82 @@ function ESP:UpdatePlayerESP()
     end
 end
 
--- Sistema de Hitbox (MÉTODO CORRETO - USA BALL_HITBOX)
+-- Sistema de Hitbox (MÉTODO STERLING - PARTE INVISÍVEL)
 local Hitbox = {}
-Hitbox.OriginalSizes = {}
-Hitbox.OriginalTransparency = {}
-Hitbox.OriginalCanCollide = {}
+Hitbox.Active = false
 Hitbox.Connection = nil
+Hitbox.HitboxPart = nil
+
+function Hitbox:CreateHitboxPart(ball)
+    -- Destruir parte antiga se existir
+    if self.HitboxPart then
+        pcall(function() self.HitboxPart:Destroy() end)
+    end
+    
+    -- Criar parte invisível maior
+    local hitboxPart = Instance.new("Part")
+    hitboxPart.Name = "BallHitbox_Custom"
+    hitboxPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
+    hitboxPart.Transparency = Config.HitboxTransparency
+    hitboxPart.CanCollide = true
+    hitboxPart.Anchored = false
+    hitboxPart.Massless = true
+    hitboxPart.Material = Enum.Material.ForceField
+    hitboxPart.Color = Color3.fromRGB(255, 100, 100)
+    hitboxPart.CFrame = ball.CFrame
+    hitboxPart.Parent = Workspace
+    
+    -- Criar Weld para seguir a bola
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = ball
+    weld.Part1 = hitboxPart
+    weld.Parent = hitboxPart
+    
+    self.HitboxPart = hitboxPart
+    
+    print("✅ Parte de hitbox criada! Tamanho:", Config.HitboxSize)
+    
+    return hitboxPart
+end
 
 function Hitbox:Start()
     if self.Connection then return end
     
-    print("🎯 Iniciando Hitbox Extender...")
+    print("🎯 Iniciando Hitbox Extender (Método Sterling - Parte Invisível)...")
     
-    -- Usar RenderStepped para máxima prioridade
-    self.Connection = RunService.RenderStepped:Connect(function()
+    self.Active = true
+    
+    -- Criar e atualizar a parte de hitbox
+    self.Connection = RunService.Heartbeat:Connect(function()
         if not Config.HitboxEnabled then return end
         
-        -- Procurar BALL_HITBOX primeiro (o hitbox real do jogo!)
-        local hitbox = Workspace:FindFirstChild("Ball_Hitbox", true)
         local ball = Utils:GetBall()
-        
-        -- Priorizar o Ball_Hitbox se existir
-        local targetPart = hitbox or ball
-        
-        if not targetPart or not targetPart.Parent then return end
-        
-        -- Salvar original apenas uma vez
-        if not self.OriginalSizes[targetPart] then
-            self.OriginalSizes[targetPart] = targetPart.Size
-            self.OriginalTransparency[targetPart] = targetPart.Transparency
-            self.OriginalCanCollide[targetPart] = targetPart.CanCollide
-            print("✅ Hitbox encontrado:", targetPart.Name)
-            print("📏 Tamanho original:", targetPart.Size)
+        if not ball or not ball.Parent then 
+            -- Destruir hitbox se a bola não existir
+            if self.HitboxPart then
+                pcall(function() self.HitboxPart:Destroy() end)
+                self.HitboxPart = nil
+            end
+            return 
         end
         
-        -- FORÇAR propriedades a cada frame
-        pcall(function()
-            targetPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-            targetPart.Transparency = Config.HitboxTransparency
-            targetPart.CanCollide = true
-            targetPart.Massless = true
-            
-            -- Desabilitar scripts que podem resetar
-            for _, script in pairs(targetPart:GetChildren()) do
-                if script:IsA("Script") or script:IsA("LocalScript") then
-                    script.Disabled = true
-                end
-            end
-        end)
+        -- Criar hitbox se não existir
+        if not self.HitboxPart or not self.HitboxPart.Parent then
+            self:CreateHitboxPart(ball)
+        end
+        
+        -- Atualizar tamanho se mudou no slider
+        if self.HitboxPart then
+            pcall(function()
+                self.HitboxPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
+                self.HitboxPart.Transparency = Config.HitboxTransparency
+                self.HitboxPart.CanCollide = true
+            end)
+        end
     end)
     
     print("✅ Hitbox ativado! Tamanho:", Config.HitboxSize)
+    print("💡 Modo: Parte Invisível (igual Sterling)")
 end
 
 function Hitbox:Stop()
@@ -325,27 +330,13 @@ function Hitbox:Stop()
         self.Connection = nil
     end
     
-    -- Restaurar todos
-    for part, _ in pairs(self.OriginalSizes) do
-        pcall(function()
-            part.Size = self.OriginalSizes[part]
-            part.Transparency = self.OriginalTransparency[part] or 0
-            part.CanCollide = self.OriginalCanCollide[part] or false
-            
-            -- Reativar scripts
-            for _, script in pairs(part:GetChildren()) do
-                if script:IsA("Script") or script:IsA("LocalScript") then
-                    script.Disabled = false
-                end
-            end
-        end)
+    -- Destruir parte de hitbox
+    if self.HitboxPart then
+        pcall(function() self.HitboxPart:Destroy() end)
+        self.HitboxPart = nil
     end
     
-    -- Limpar cache
-    self.OriginalSizes = {}
-    self.OriginalTransparency = {}
-    self.OriginalCanCollide = {}
-    
+    self.Active = false
     print("❌ Hitbox desativado")
 end
 
