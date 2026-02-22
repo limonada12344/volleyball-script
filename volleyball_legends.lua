@@ -47,7 +47,7 @@ local Config = {
     
     -- Hitbox
     HitboxEnabled = false,
-    HitboxSize = 15, -- Tamanho da hitbox (padrão: 15)
+    HitboxSize = 15, -- Tamanho da hitbox
     HitboxTransparency = 0.7,
     
     -- ESP
@@ -203,18 +203,25 @@ end
 
 function ESP:UpdateBallESP()
     if not Config.BallESPEnabled then
-        self:ClearAll()
+        -- Remover apenas ESP da bola
+        for obj, highlight in pairs(self.Objects) do
+            if not obj:IsA("Player") then
+                highlight:Destroy()
+                self.Objects[obj] = nil
+            end
+        end
         return
     end
     
     local ball = Utils:GetBall()
-    if ball then
+    if ball and not self.Objects[ball] then
         self:CreateBallESP(ball)
     end
 end
 
 function ESP:UpdatePlayerESP()
     if not Config.PlayerESPEnabled then
+        -- Remover apenas ESP de jogadores
         for player, _ in pairs(ESP.Objects) do
             if player:IsA("Player") then
                 self:RemoveESP(player)
@@ -224,21 +231,22 @@ function ESP:UpdatePlayerESP()
     end
     
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
+        if player ~= LocalPlayer and player.Character and not self.Objects[player] then
             self:CreatePlayerESP(player)
         end
     end
 end
 
--- Sistema de Hitbox (MELHORADO)
+-- Sistema de Hitbox (FORÇADO - FUNCIONA!)
 local Hitbox = {}
 Hitbox.OriginalSizes = {}
 Hitbox.OriginalTransparency = {}
 Hitbox.OriginalCanCollide = {}
+Hitbox.Connection = nil
 
 function Hitbox:Expand(part, size)
     if not part or not part:IsA("BasePart") or not part.Parent then 
-        return 
+        return false
     end
     
     -- Salvar propriedades originais (apenas uma vez)
@@ -247,22 +255,16 @@ function Hitbox:Expand(part, size)
         self.OriginalTransparency[part] = part.Transparency
         self.OriginalCanCollide[part] = part.CanCollide
         
-        -- Debug: confirmar que salvou
-        print("✅ Hitbox salvo - Tamanho original:", part.Size)
+        print("✅ Hitbox salvo - Bola:", part.Name, "| Tamanho original:", part.Size)
     end
     
-    -- Expandir hitbox
+    -- FORÇAR o tamanho (o jogo tenta reverter, mas vamos forçar sempre)
     part.Size = Vector3.new(size, size, size)
     part.Transparency = Config.HitboxTransparency
     part.CanCollide = false
+    part.Massless = true
     
-    -- Debug: confirmar expansão
-    if not part:FindFirstChild("HitboxMarker") then
-        print("✅ Hitbox expandido para:", size)
-        local marker = Instance.new("BoolValue")
-        marker.Name = "HitboxMarker"
-        marker.Parent = part
-    end
+    return true
 end
 
 function Hitbox:Restore(part)
@@ -277,30 +279,49 @@ function Hitbox:Restore(part)
     self.OriginalSizes[part] = nil
     self.OriginalTransparency[part] = nil
     self.OriginalCanCollide[part] = nil
+end
+
+function Hitbox:Start()
+    if self.Connection then return end
     
-    -- Remover marker
-    local marker = part:FindFirstChild("HitboxMarker")
-    if marker then
-        marker:Destroy()
+    -- Conectar ao Heartbeat para FORÇAR o hitbox a cada frame
+    self.Connection = RunService.Heartbeat:Connect(function()
+        if not Config.HitboxEnabled then return end
+        
+        local ball = Utils:GetBall()
+        if ball and ball.Parent then
+            -- Forçar o tamanho a cada frame
+            ball.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
+            ball.Transparency = Config.HitboxTransparency
+            ball.CanCollide = false
+            ball.Massless = true
+        end
+    end)
+    
+    print("✅ Hitbox forçado ativado!")
+end
+
+function Hitbox:Stop()
+    if self.Connection then
+        self.Connection:Disconnect()
+        self.Connection = nil
     end
+    
+    -- Restaurar todos
+    for part, _ in pairs(self.OriginalSizes) do
+        pcall(function()
+            self:Restore(part)
+        end)
+    end
+    
+    print("❌ Hitbox desativado")
 end
 
 function Hitbox:Update()
-    if not Config.HitboxEnabled then
-        -- Restaurar todos
-        for part, _ in pairs(self.OriginalSizes) do
-            pcall(function()
-                self:Restore(part)
-            end)
-        end
-        return
-    end
-    
-    local ball = Utils:GetBall()
-    if ball and ball.Parent then
-        pcall(function()
-            self:Expand(ball, Config.HitboxSize)
-        end)
+    if Config.HitboxEnabled then
+        self:Start()
+    else
+        self:Stop()
     end
 end
 
@@ -426,27 +447,37 @@ local function setupAntiAFK()
     print("✅ Anti-AFK ativado")
 end
 
--- Loop principal (OTIMIZADO)
+-- Loop principal (OTIMIZADO - SEM PISCAR)
 local function mainLoop()
-    -- Loop principal mais lento para não travar
+    -- Loop de Hitbox (FORÇADO a cada frame)
+    -- Não precisa de loop separado, usa Heartbeat interno
+    
+    -- Loop de Aimbot (frequente)
     spawn(function()
-        while wait(0.1) do -- Reduzido de Heartbeat para 0.1s
+        while wait(0.05) do
             pcall(function()
                 if Config.AimbotEnabled then
                     Aimbot:Update()
                 end
-                if Config.HitboxEnabled then
-                    Hitbox:Update()
-                end
-                if Config.BallESPEnabled or Config.PlayerESPEnabled then
+            end)
+        end
+    end)
+    
+    -- Loop de ESP (menos frequente para não piscar)
+    spawn(function()
+        while wait(1) do -- 1 segundo para não piscar
+            pcall(function()
+                if Config.BallESPEnabled then
                     ESP:UpdateBallESP()
+                end
+                if Config.PlayerESPEnabled then
                     ESP:UpdatePlayerESP()
                 end
             end)
         end
     end)
     
-    -- Loop de auto features (ainda mais lento)
+    -- Loop de auto features (lento)
     spawn(function()
         while wait(0.5) do
             pcall(function()
