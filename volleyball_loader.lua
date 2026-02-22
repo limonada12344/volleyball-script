@@ -2,7 +2,7 @@
     VOLLEYBALL LEGENDS - LOADER
     
     Execute este script no Velocity/Xeno:
-    https://raw.githubusercontent.com/limonada12344/volleyball-script/refs/heads/main/volleyball_legends.lua
+     loadstring(game:HttpGet("URL_DESTE_ARQUIVO"))()
 ]]
 
 -- Verificar se está no jogo certo
@@ -99,4 +99,5 @@ print("╔═══════════════════════�
 print("║     CARREGADO COM SUCESSO!         ║")
 print("║   Pressione INSERT para abrir      ║")
 print("╚════════════════════════════════════╝")
+
 
