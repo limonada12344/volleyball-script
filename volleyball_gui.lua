@@ -3,11 +3,6 @@
     Interface moderna e fácil de usar
 ]]
 
--- Carregar o script principal primeiro
-loadstring(game:HttpGet("URL_DO_VOLLEYBALL_LEGENDS.LUA"))()
-
-wait(1)
-
 -- Verificar se o script foi carregado
 if not _G.VolleyballConfig then
     warn("❌ Script principal não foi carregado!")
