@@ -58,7 +58,7 @@ print("╚═══════════════════════�
 
 -- Carregar script principal
 local success1, err1 = pcall(function()
-    loadstring(game:HttpGet("URL_DO_VOLLEYBALL_LEGENDS.LUA"))()
+   loadstring(game:HttpGet("https://raw.githubusercontent.com/limonada12344/volleyball-script/refs/heads/main/volleyball_legends.lua"))()
 end)
 
 if not success1 then
@@ -75,7 +75,7 @@ wait(1)
 
 -- Carregar GUI
 local success2, err2 = pcall(function()
-    loadstring(game:HttpGet("URL_DO_VOLLEYBALL_GUI.LUA"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/limonada12344/volleyball-script/refs/heads/main/volleyball_gui.lua"))()
 end)
 
 if not success2 then
@@ -99,5 +99,6 @@ print("╔═══════════════════════�
 print("║     CARREGADO COM SUCESSO!         ║")
 print("║   Pressione INSERT para abrir      ║")
 print("╚════════════════════════════════════╝")
+
 
 
