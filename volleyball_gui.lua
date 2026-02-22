@@ -4,7 +4,7 @@
 ]]
 
 -- Carregar o script principal primeiro
-loadstring(game:HttpGet("https://raw.githubusercontent.com/limonada12344/volleyball-script/refs/heads/main/volleyball_legends.lua"))()
+loadstring(game:HttpGet("URL_DO_VOLLEYBALL_LEGENDS.LUA"))()
 
 wait(1)
 
@@ -369,7 +369,7 @@ createToggle("Hitbox Extender", "Aumentar área de acerto", Config.HitboxEnabled
     print("Hitbox:", value)
 end)
 
-createSlider("Tamanho", 3, 15, Config.HitboxSize, function(value)
+createSlider("Tamanho", 5, 100, Config.HitboxSize, function(value)
     Config.HitboxSize = value
 end)
 
@@ -418,5 +418,3 @@ end)
 mainFrame.Visible = true
 
 print("✅ GUI carregada! Pressione INSERT para abrir/fechar")
-
-
