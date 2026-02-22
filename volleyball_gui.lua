@@ -4,7 +4,7 @@
 ]]
 
 -- Carregar o script principal primeiro
-https://raw.githubusercontent.com/limonada12344/volleyball-script/refs/heads/main/volleyball_gui.lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/limonada12344/volleyball-script/refs/heads/main/volleyball_legends.lua"))()
 
 wait(1)
 
@@ -418,4 +418,5 @@ end)
 mainFrame.Visible = true
 
 print("✅ GUI carregada! Pressione INSERT para abrir/fechar")
+
 
