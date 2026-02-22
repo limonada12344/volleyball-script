@@ -246,82 +246,55 @@ function ESP:UpdatePlayerESP()
     end
 end
 
--- Sistema de Hitbox (MÉTODO STERLING - PARTE INVISÍVEL)
+-- Sistema de Hitbox (MÉTODO CORRETO - EXPANDE A BOLA REAL)
 local Hitbox = {}
-Hitbox.Active = false
+Hitbox.OriginalSize = nil
+Hitbox.OriginalTransparency = nil
+Hitbox.OriginalCanCollide = nil
 Hitbox.Connection = nil
-Hitbox.HitboxPart = nil
-
-function Hitbox:CreateHitboxPart(ball)
-    -- Destruir parte antiga se existir
-    if self.HitboxPart then
-        pcall(function() self.HitboxPart:Destroy() end)
-    end
-    
-    -- Criar parte invisível maior
-    local hitboxPart = Instance.new("Part")
-    hitboxPart.Name = "BallHitbox_Custom"
-    hitboxPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-    hitboxPart.Transparency = Config.HitboxTransparency
-    hitboxPart.CanCollide = true
-    hitboxPart.Anchored = false
-    hitboxPart.Massless = true
-    hitboxPart.Material = Enum.Material.ForceField
-    hitboxPart.Color = Color3.fromRGB(255, 100, 100)
-    hitboxPart.CFrame = ball.CFrame
-    hitboxPart.Parent = Workspace
-    
-    -- Criar Weld para seguir a bola
-    local weld = Instance.new("WeldConstraint")
-    weld.Part0 = ball
-    weld.Part1 = hitboxPart
-    weld.Parent = hitboxPart
-    
-    self.HitboxPart = hitboxPart
-    
-    print("✅ Parte de hitbox criada! Tamanho:", Config.HitboxSize)
-    
-    return hitboxPart
-end
+Hitbox.BallRef = nil
 
 function Hitbox:Start()
     if self.Connection then return end
     
-    print("🎯 Iniciando Hitbox Extender (Método Sterling - Parte Invisível)...")
+    print("🎯 Iniciando Hitbox Extender...")
     
-    self.Active = true
-    
-    -- Criar e atualizar a parte de hitbox
-    self.Connection = RunService.Heartbeat:Connect(function()
+    -- Usar RenderStepped para máxima prioridade e força
+    self.Connection = RunService.RenderStepped:Connect(function()
         if not Config.HitboxEnabled then return end
         
         local ball = Utils:GetBall()
         if not ball or not ball.Parent then 
-            -- Destruir hitbox se a bola não existir
-            if self.HitboxPart then
-                pcall(function() self.HitboxPart:Destroy() end)
-                self.HitboxPart = nil
-            end
+            self.BallRef = nil
             return 
         end
         
-        -- Criar hitbox se não existir
-        if not self.HitboxPart or not self.HitboxPart.Parent then
-            self:CreateHitboxPart(ball)
+        -- Salvar original apenas uma vez
+        if ball ~= self.BallRef then
+            self.BallRef = ball
+            self.OriginalSize = ball.Size
+            self.OriginalTransparency = ball.Transparency
+            self.OriginalCanCollide = ball.CanCollide
+            print("✅ Bola encontrada:", ball.Name)
+            print("📏 Tamanho original:", ball.Size)
         end
         
-        -- Atualizar tamanho se mudou no slider
-        if self.HitboxPart then
-            pcall(function()
-                self.HitboxPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-                self.HitboxPart.Transparency = Config.HitboxTransparency
-                self.HitboxPart.CanCollide = true
-            end)
-        end
+        -- FORÇAR expansão da bola REAL a cada frame
+        pcall(function()
+            ball.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
+            ball.Transparency = Config.HitboxTransparency
+            ball.CanCollide = true
+            ball.Massless = true
+            
+            -- Forçar CollisionFidelity para Box (mais simples = mais fácil acertar)
+            if ball:IsA("MeshPart") then
+                ball.CollisionFidelity = Enum.CollisionFidelity.Box
+            end
+        end)
     end)
     
     print("✅ Hitbox ativado! Tamanho:", Config.HitboxSize)
-    print("💡 Modo: Parte Invisível (igual Sterling)")
+    print("💡 Forçando expansão da bola a cada frame")
 end
 
 function Hitbox:Stop()
@@ -330,13 +303,20 @@ function Hitbox:Stop()
         self.Connection = nil
     end
     
-    -- Destruir parte de hitbox
-    if self.HitboxPart then
-        pcall(function() self.HitboxPart:Destroy() end)
-        self.HitboxPart = nil
+    -- Restaurar bola original
+    if self.BallRef and self.BallRef.Parent and self.OriginalSize then
+        pcall(function()
+            self.BallRef.Size = self.OriginalSize
+            self.BallRef.Transparency = self.OriginalTransparency or 0
+            self.BallRef.CanCollide = self.OriginalCanCollide or false
+        end)
     end
     
-    self.Active = false
+    self.BallRef = nil
+    self.OriginalSize = nil
+    self.OriginalTransparency = nil
+    self.OriginalCanCollide = nil
+    
     print("❌ Hitbox desativado")
 end
 
