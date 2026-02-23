@@ -1,9 +1,9 @@
 --[[
-    VOLLEYBALL LEGENDS - HITBOX REAL
-    Versão: 6.0.0 - MÉTODO CORRETO
+    VOLLEYBALL LEGENDS - VERSÃO FINAL
+    Versão: 7.0.0 - TELEPORTE AGRESSIVO
     
-    Cria hitbox INVISÍVEL ao redor do jogador
-    Quando a bola toca a hitbox = teleporta jogador
+    Método: Detecção de distância + Teleporte direto
+    SEM hitbox part, SEM física, APENAS teleporte!
 ]]
 
 if _G.VolleyballLegendsLoaded then
@@ -14,7 +14,7 @@ end
 _G.VolleyballLegendsLoaded = true
 
 print("╔════════════════════════════════════╗")
-print("║   VOLLEYBALL LEGENDS - HITBOX REAL ║")
+print("║   VOLLEYBALL LEGENDS - FINAL       ║")
 print("╚════════════════════════════════════╝")
 
 local Players = game:GetService("Players")
@@ -33,7 +33,7 @@ local Config = {
     AimbotPrediction = true,
     
     HitboxEnabled = false,
-    HitboxSize = 30, -- Tamanho da hitbox invisível
+    HitboxSize = 30,
     
     BallESPEnabled = false,
     PlayerESPEnabled = false,
@@ -131,7 +131,7 @@ function Utils:IsInFOV(position, fov)
     return distance <= fov
 end
 
--- ESP System
+-- ESP
 local ESP = {}
 ESP.Objects = {}
 
@@ -218,54 +218,19 @@ function ESP:UpdatePlayerESP()
     end
 end
 
--- HITBOX REAL - Cria parte invisível ao redor do jogador!
+-- HITBOX FINAL - TELEPORTE DIRETO E AGRESSIVO!
 local Hitbox = {}
 Hitbox.Connection = nil
-Hitbox.HitboxPart = nil
-
-function Hitbox:CreateHitboxPart()
-    if self.HitboxPart then
-        self.HitboxPart:Destroy()
-    end
-    
-    local hrp = Utils:GetRootPart()
-    if not hrp then return end
-    
-    -- Criar parte invisível
-    local hitboxPart = Instance.new("Part")
-    hitboxPart.Name = "CustomHitbox"
-    hitboxPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-    hitboxPart.CFrame = hrp.CFrame
-    hitboxPart.Transparency = 0.8 -- Semi-transparente para ver
-    hitboxPart.Color = Color3.fromRGB(0, 255, 0)
-    hitboxPart.Material = Enum.Material.Neon
-    hitboxPart.CanCollide = false
-    hitboxPart.Anchored = false
-    hitboxPart.Massless = true
-    hitboxPart.Parent = Workspace
-    
-    -- Weld para seguir o jogador
-    local weld = Instance.new("WeldConstraint")
-    weld.Part0 = hrp
-    weld.Part1 = hitboxPart
-    weld.Parent = hitboxPart
-    
-    self.HitboxPart = hitboxPart
-    
-    print("✅ Hitbox Part criada! Tamanho:", Config.HitboxSize)
-end
+Hitbox.LastTeleport = 0
 
 function Hitbox:Start()
     if self.Connection then return end
     
-    print("🎯 Iniciando Hitbox REAL...")
-    print("💡 Criando hitbox invisível ao redor do jogador")
+    print("🎯 Iniciando Hitbox FINAL...")
+    print("💥 TELEPORTE DIRETO - MÁXIMA AGRESSIVIDADE!")
     
-    -- Criar hitbox part
-    self:CreateHitboxPart()
-    
-    -- Loop para detectar colisão
-    self.Connection = RunService.Heartbeat:Connect(function()
+    -- Usar RenderStepped para máxima velocidade
+    self.Connection = RunService.RenderStepped:Connect(function()
         if not Config.HitboxEnabled then return end
         
         local char = Utils:GetCharacter()
@@ -277,44 +242,55 @@ function Hitbox:Start()
         local ball = Utils:GetBall()
         if not ball then return end
         
-        if not self.HitboxPart or not self.HitboxPart.Parent then
-            self:CreateHitboxPart()
-            return
-        end
+        -- Calcular distância
+        local distance = (ball.Position - hrp.Position).Magnitude
         
-        -- Verificar se a bola está dentro da hitbox
-        local hitboxPos = self.HitboxPart.Position
-        local ballPos = ball.Position
-        local distance = (ballPos - hitboxPos).Magnitude
-        local hitboxRadius = Config.HitboxSize / 2
+        -- Alcance baseado no slider
+        local actionRadius = Config.HitboxSize
         
-        if distance <= hitboxRadius then
-            -- BOLA DENTRO DA HITBOX!
-            -- Teleportar jogador para perto da bola
-            local direction = (ballPos - hrp.Position).Unit
-            local targetPos = ballPos - (direction * 2)
+        -- Se a bola está dentro do alcance
+        if distance <= actionRadius and distance > 1 then
+            -- Cooldown de 0.1s entre teleportes (evita spam)
+            local currentTime = tick()
+            if (currentTime - self.LastTeleport) < 0.1 then
+                return
+            end
             
+            self.LastTeleport = currentTime
+            
+            -- Direção para a bola
+            local direction = (ball.Position - hrp.Position).Unit
+            
+            -- Posição alvo: 1.5 studs da bola
+            local targetPos = ball.Position - (direction * 1.5)
+            
+            -- TELEPORTE DIRETO!
             pcall(function()
-                hrp.CFrame = CFrame.new(targetPos)
-                hrp.AssemblyLinearVelocity = direction * 50
+                -- Método 1: Teleporte CFrame
+                hrp.CFrame = CFrame.new(targetPos, ball.Position)
+                
+                -- Método 2: Zerar velocidade
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                
+                -- Método 3: Aplicar velocidade na direção da bola
+                task.wait(0.01)
+                hrp.AssemblyLinearVelocity = direction * 80
+                
+                -- Debug
+                print("💥 TELEPORTADO! Distância:", math.floor(distance), "studs")
             end)
         end
     end)
     
-    print("✅ Hitbox REAL ativado!")
-    print("📏 Tamanho:", Config.HitboxSize, "studs")
-    print("🟢 Hitbox verde visível ao redor de você!")
+    print("✅ Hitbox FINAL ativado!")
+    print("📏 Alcance:", Config.HitboxSize, "studs")
+    print("⚡ Teleporte direto quando bola entrar no alcance!")
 end
 
 function Hitbox:Stop()
     if self.Connection then
         self.Connection:Disconnect()
         self.Connection = nil
-    end
-    
-    if self.HitboxPart then
-        self.HitboxPart:Destroy()
-        self.HitboxPart = nil
     end
     
     print("❌ Hitbox desativado")
@@ -325,13 +301,6 @@ function Hitbox:Update()
         self:Start()
     else
         self:Stop()
-    end
-end
-
-function Hitbox:UpdateSize()
-    if self.HitboxPart then
-        self.HitboxPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-        print("🔧 Hitbox atualizada! Novo tamanho:", Config.HitboxSize)
     end
 end
 
@@ -525,13 +494,13 @@ local function initialize()
     
     notify(
         "Volleyball Legends",
-        "Hitbox REAL carregado! Pressione INSERT.",
+        "VERSÃO FINAL carregada! Pressione INSERT.",
         5
     )
     
     print("╔════════════════════════════════════╗")
-    print("║   HITBOX REAL - CARREGADO!         ║")
-    print("║   Hitbox invisível ao redor!       ║")
+    print("║   VERSÃO FINAL - CARREGADO!        ║")
+    print("║   Teleporte direto e agressivo!    ║")
     print("╚════════════════════════════════════╝")
 end
 
