@@ -1,9 +1,9 @@
 --[[
-    VOLLEYBALL LEGENDS - EXTREMO
-    Versão: 5.0.0 - MÁXIMA AGRESSIVIDADE
+    VOLLEYBALL LEGENDS - HITBOX REAL
+    Versão: 6.0.0 - MÉTODO CORRETO
     
-    HITBOX EXTREMO - PEGA DE MUITO LONGE!
-    Sem Spring, só força bruta que FUNCIONA!
+    Cria hitbox INVISÍVEL ao redor do jogador
+    Quando a bola toca a hitbox = teleporta jogador
 ]]
 
 if _G.VolleyballLegendsLoaded then
@@ -14,10 +14,9 @@ end
 _G.VolleyballLegendsLoaded = true
 
 print("╔════════════════════════════════════╗")
-print("║   VOLLEYBALL LEGENDS - EXTREMO     ║")
+print("║   VOLLEYBALL LEGENDS - HITBOX REAL ║")
 print("╚════════════════════════════════════╝")
 
--- Serviços
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -27,7 +26,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
--- Configurações
 local Config = {
     AimbotEnabled = false,
     AimbotFOV = 200,
@@ -35,7 +33,7 @@ local Config = {
     AimbotPrediction = true,
     
     HitboxEnabled = false,
-    HitboxSize = 30, -- Slider
+    HitboxSize = 30, -- Tamanho da hitbox invisível
     
     BallESPEnabled = false,
     PlayerESPEnabled = false,
@@ -53,7 +51,6 @@ local Config = {
     MaxDelay = 0.15
 }
 
--- Utilitários
 local Utils = {}
 
 function Utils:GetCharacter()
@@ -134,7 +131,7 @@ function Utils:IsInFOV(position, fov)
     return distance <= fov
 end
 
--- Sistema de ESP
+-- ESP System
 local ESP = {}
 ESP.Objects = {}
 
@@ -221,16 +218,53 @@ function ESP:UpdatePlayerESP()
     end
 end
 
--- HITBOX EXTREMO - IGUAL STERLING!
+-- HITBOX REAL - Cria parte invisível ao redor do jogador!
 local Hitbox = {}
 Hitbox.Connection = nil
+Hitbox.HitboxPart = nil
+
+function Hitbox:CreateHitboxPart()
+    if self.HitboxPart then
+        self.HitboxPart:Destroy()
+    end
+    
+    local hrp = Utils:GetRootPart()
+    if not hrp then return end
+    
+    -- Criar parte invisível
+    local hitboxPart = Instance.new("Part")
+    hitboxPart.Name = "CustomHitbox"
+    hitboxPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
+    hitboxPart.CFrame = hrp.CFrame
+    hitboxPart.Transparency = 0.8 -- Semi-transparente para ver
+    hitboxPart.Color = Color3.fromRGB(0, 255, 0)
+    hitboxPart.Material = Enum.Material.Neon
+    hitboxPart.CanCollide = false
+    hitboxPart.Anchored = false
+    hitboxPart.Massless = true
+    hitboxPart.Parent = Workspace
+    
+    -- Weld para seguir o jogador
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = hrp
+    weld.Part1 = hitboxPart
+    weld.Parent = hitboxPart
+    
+    self.HitboxPart = hitboxPart
+    
+    print("✅ Hitbox Part criada! Tamanho:", Config.HitboxSize)
+end
 
 function Hitbox:Start()
     if self.Connection then return end
     
-    print("🎯 Iniciando Hitbox EXTREMO...")
-    print("💥 MÁXIMA AGRESSIVIDADE - IGUAL STERLING!")
+    print("🎯 Iniciando Hitbox REAL...")
+    print("💡 Criando hitbox invisível ao redor do jogador")
     
+    -- Criar hitbox part
+    self:CreateHitboxPart()
+    
+    -- Loop para detectar colisão
     self.Connection = RunService.Heartbeat:Connect(function()
         if not Config.HitboxEnabled then return end
         
@@ -240,57 +274,47 @@ function Hitbox:Start()
         local hrp = Utils:GetRootPart()
         if not hrp then return end
         
-        local humanoid = Utils:GetHumanoid()
-        if not humanoid then return end
-        
         local ball = Utils:GetBall()
         if not ball then return end
         
-        local distance = (ball.Position - hrp.Position).Magnitude
+        if not self.HitboxPart or not self.HitboxPart.Parent then
+            self:CreateHitboxPart()
+            return
+        end
         
-        -- ALCANCE EXTREMO: Slider × 10!
-        -- Slider 30 = 300 studs (MUITO LONGE!)
-        local actionRadius = Config.HitboxSize * 10
+        -- Verificar se a bola está dentro da hitbox
+        local hitboxPos = self.HitboxPart.Position
+        local ballPos = ball.Position
+        local distance = (ballPos - hitboxPos).Magnitude
+        local hitboxRadius = Config.HitboxSize / 2
         
-        if distance <= actionRadius and distance > 1 then
-            -- Direção para a bola
-            local direction = (ball.Position - hrp.Position).Unit
-            
-            -- TELEPORTE DIRETO - SEM SUAVIZAÇÃO!
-            -- Posição alvo: 2 studs da bola
-            local targetPos = ball.Position - (direction * 2)
+        if distance <= hitboxRadius then
+            -- BOLA DENTRO DA HITBOX!
+            -- Teleportar jogador para perto da bola
+            local direction = (ballPos - hrp.Position).Unit
+            local targetPos = ballPos - (direction * 2)
             
             pcall(function()
-                -- MÉTODO 1: Teleporte CFrame direto
                 hrp.CFrame = CFrame.new(targetPos)
-                
-                -- MÉTODO 2: Zerar velocidade contrária
-                hrp.AssemblyLinearVelocity = Vector3.zero
-                
-                -- MÉTODO 3: Aplicar velocidade na direção da bola
-                hrp.AssemblyLinearVelocity = direction * 100
-                
-                -- MÉTODO 4: Desabilitar física temporariamente
-                hrp.Anchored = false
-                
-                -- MÉTODO 5: Forçar posição do Humanoid
-                if humanoid then
-                    humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-                end
+                hrp.AssemblyLinearVelocity = direction * 50
             end)
         end
     end)
     
-    print("✅ Hitbox EXTREMO ativado!")
-    print("📏 Alcance REAL:", Config.HitboxSize * 10, "studs")
-    print("💥 Slider 30 = 300 STUDS!")
-    print("⚡ TELEPORTE DIRETO - SEM LIMITES!")
+    print("✅ Hitbox REAL ativado!")
+    print("📏 Tamanho:", Config.HitboxSize, "studs")
+    print("🟢 Hitbox verde visível ao redor de você!")
 end
 
 function Hitbox:Stop()
     if self.Connection then
         self.Connection:Disconnect()
         self.Connection = nil
+    end
+    
+    if self.HitboxPart then
+        self.HitboxPart:Destroy()
+        self.HitboxPart = nil
     end
     
     print("❌ Hitbox desativado")
@@ -304,7 +328,14 @@ function Hitbox:Update()
     end
 end
 
--- Sistema de Aimbot
+function Hitbox:UpdateSize()
+    if self.HitboxPart then
+        self.HitboxPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
+        print("🔧 Hitbox atualizada! Novo tamanho:", Config.HitboxSize)
+    end
+end
+
+-- Aimbot
 local Aimbot = {}
 Aimbot.Target = nil
 
@@ -354,7 +385,7 @@ function Aimbot:Update()
     end
 end
 
--- Sistema de Auto Features
+-- Auto Features
 local Auto = {}
 
 function Auto:Serve()
@@ -427,7 +458,7 @@ local function setupAntiAFK()
     end
 end
 
--- Loop principal
+-- Main Loop
 local function mainLoop()
     spawn(function()
         while wait(0.05) do
@@ -494,13 +525,13 @@ local function initialize()
     
     notify(
         "Volleyball Legends",
-        "EXTREMO carregado! Pressione INSERT.",
+        "Hitbox REAL carregado! Pressione INSERT.",
         5
     )
     
     print("╔════════════════════════════════════╗")
-    print("║   EXTREMO - CARREGADO!             ║")
-    print("║   TELEPORTE DIRETO - SEM LIMITES!  ║")
+    print("║   HITBOX REAL - CARREGADO!         ║")
+    print("║   Hitbox invisível ao redor!       ║")
     print("╚════════════════════════════════════╝")
 end
 
