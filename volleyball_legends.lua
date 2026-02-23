@@ -1,20 +1,19 @@
 --[[
-    VOLLEYBALL LEGENDS - VERSÃO FINAL
-    Versão: 7.0.0 - TELEPORTE AGRESSIVO
+    VOLLEYBALL LEGENDS - DEBUG VERSION
+    Versão: 8.0.0 - MODO DEBUG
     
-    Método: Detecção de distância + Teleporte direto
-    SEM hitbox part, SEM física, APENAS teleporte!
+    Esta versão mostra TUDO no console para descobrir o problema!
 ]]
 
 if _G.VolleyballLegendsLoaded then
-    warn("⚠️ Script já está carregado!")
-    return
+    _G.VolleyballLegendsLoaded = nil
+    wait(1)
 end
 
 _G.VolleyballLegendsLoaded = true
 
 print("╔════════════════════════════════════╗")
-print("║   VOLLEYBALL LEGENDS - FINAL       ║")
+print("║   VOLLEYBALL LEGENDS - DEBUG       ║")
 print("╚════════════════════════════════════╝")
 
 local Players = game:GetService("Players")
@@ -77,6 +76,7 @@ end
 
 local cachedBall = nil
 local lastBallCheck = 0
+local ballSearchAttempts = 0
 
 function Utils:GetBall()
     local currentTime = tick()
@@ -85,21 +85,35 @@ function Utils:GetBall()
     end
     
     lastBallCheck = currentTime
+    ballSearchAttempts = ballSearchAttempts + 1
     
+    -- Procurar pela bola
     local ball = Workspace:FindFirstChild("Ball") or 
                  Workspace:FindFirstChild("Volleyball") or
                  Workspace:FindFirstChild("ball") or
                  Workspace:FindFirstChild("VolleyBall")
     
     if not ball then
+        -- Procurar em descendentes
         for _, obj in pairs(Workspace:GetDescendants()) do
-            if obj:IsA("BasePart") and (
-                obj.Name:lower():find("ball") or
-                obj.Name:lower():find("volley")
-            ) then
-                ball = obj
-                break
+            if obj:IsA("BasePart") then
+                local name = obj.Name:lower()
+                if name:find("ball") or name:find("volley") then
+                    ball = obj
+                    print("🔍 [DEBUG] Bola encontrada:", obj.Name, "em", obj.Parent.Name)
+                    break
+                end
             end
+        end
+    else
+        print("🔍 [DEBUG] Bola encontrada diretamente:", ball.Name)
+    end
+    
+    if not ball and ballSearchAttempts % 100 == 0 then
+        warn("⚠️ [DEBUG] Bola NÃO encontrada após", ballSearchAttempts, "tentativas!")
+        warn("⚠️ [DEBUG] Listando objetos no Workspace:")
+        for _, obj in pairs(Workspace:GetChildren()) do
+            print("  -", obj.Name, obj.ClassName)
         end
     end
     
@@ -147,6 +161,7 @@ function ESP:CreateBallESP(ball)
     highlight.Parent = ball
     
     ESP.Objects[ball] = highlight
+    print("✅ [DEBUG] Ball ESP criado")
 end
 
 function ESP:CreatePlayerESP(player)
@@ -218,41 +233,71 @@ function ESP:UpdatePlayerESP()
     end
 end
 
--- HITBOX FINAL - TELEPORTE DIRETO E AGRESSIVO!
+-- HITBOX DEBUG - Mostra TUDO no console!
 local Hitbox = {}
 Hitbox.Connection = nil
 Hitbox.LastTeleport = 0
+Hitbox.DebugCounter = 0
 
 function Hitbox:Start()
     if self.Connection then return end
     
-    print("🎯 Iniciando Hitbox FINAL...")
-    print("💥 TELEPORTE DIRETO - MÁXIMA AGRESSIVIDADE!")
+    print("🎯 [DEBUG] Iniciando Hitbox DEBUG...")
+    print("📏 [DEBUG] Alcance configurado:", Config.HitboxSize, "studs")
     
-    -- Usar RenderStepped para máxima velocidade
-    self.Connection = RunService.RenderStepped:Connect(function()
+    self.Connection = RunService.Heartbeat:Connect(function()
         if not Config.HitboxEnabled then return end
         
+        self.DebugCounter = self.DebugCounter + 1
+        
+        -- Debug a cada 60 frames (1 segundo)
+        if self.DebugCounter % 60 == 0 then
+            print("🔄 [DEBUG] Loop rodando... Frame:", self.DebugCounter)
+        end
+        
         local char = Utils:GetCharacter()
-        if not char then return end
+        if not char then
+            if self.DebugCounter % 60 == 0 then
+                warn("⚠️ [DEBUG] Character não encontrado!")
+            end
+            return
+        end
         
         local hrp = Utils:GetRootPart()
-        if not hrp then return end
+        if not hrp then
+            if self.DebugCounter % 60 == 0 then
+                warn("⚠️ [DEBUG] HumanoidRootPart não encontrado!")
+            end
+            return
+        end
         
         local ball = Utils:GetBall()
-        if not ball then return end
+        if not ball then
+            if self.DebugCounter % 60 == 0 then
+                warn("⚠️ [DEBUG] Bola não encontrada!")
+            end
+            return
+        end
         
         -- Calcular distância
         local distance = (ball.Position - hrp.Position).Magnitude
+        
+        -- Debug distância a cada 60 frames
+        if self.DebugCounter % 60 == 0 then
+            print("📏 [DEBUG] Distância da bola:", math.floor(distance), "studs | Alcance:", Config.HitboxSize)
+        end
         
         -- Alcance baseado no slider
         local actionRadius = Config.HitboxSize
         
         -- Se a bola está dentro do alcance
         if distance <= actionRadius and distance > 1 then
-            -- Cooldown de 0.1s entre teleportes (evita spam)
+            print("🎯 [DEBUG] BOLA NO ALCANCE! Distância:", math.floor(distance), "studs")
+            
+            -- Cooldown
             local currentTime = tick()
             if (currentTime - self.LastTeleport) < 0.1 then
+                print("⏳ [DEBUG] Cooldown ativo, aguardando...")
                 return
             end
             
@@ -261,30 +306,30 @@ function Hitbox:Start()
             -- Direção para a bola
             local direction = (ball.Position - hrp.Position).Unit
             
-            -- Posição alvo: 1.5 studs da bola
+            -- Posição alvo
             local targetPos = ball.Position - (direction * 1.5)
             
-            -- TELEPORTE DIRETO!
-            pcall(function()
-                -- Método 1: Teleporte CFrame
+            print("💥 [DEBUG] TENTANDO TELEPORTAR!")
+            print("   Posição atual:", hrp.Position)
+            print("   Posição alvo:", targetPos)
+            
+            -- TELEPORTE
+            local success, err = pcall(function()
                 hrp.CFrame = CFrame.new(targetPos, ball.Position)
-                
-                -- Método 2: Zerar velocidade
                 hrp.AssemblyLinearVelocity = Vector3.zero
-                
-                -- Método 3: Aplicar velocidade na direção da bola
                 task.wait(0.01)
                 hrp.AssemblyLinearVelocity = direction * 80
-                
-                -- Debug
-                print("💥 TELEPORTADO! Distância:", math.floor(distance), "studs")
             end)
+            
+            if success then
+                print("✅ [DEBUG] TELEPORTE EXECUTADO COM SUCESSO!")
+            else
+                warn("❌ [DEBUG] ERRO NO TELEPORTE:", err)
+            end
         end
     end)
     
-    print("✅ Hitbox FINAL ativado!")
-    print("📏 Alcance:", Config.HitboxSize, "studs")
-    print("⚡ Teleporte direto quando bola entrar no alcance!")
+    print("✅ [DEBUG] Hitbox iniciado!")
 end
 
 function Hitbox:Stop()
@@ -293,110 +338,78 @@ function Hitbox:Stop()
         self.Connection = nil
     end
     
-    print("❌ Hitbox desativado")
+    print("❌ [DEBUG] Hitbox desativado")
 end
 
 function Hitbox:Update()
     if Config.HitboxEnabled then
+        print("🟢 [DEBUG] Hitbox ATIVADO pelo toggle")
         self:Start()
     else
+        print("🔴 [DEBUG] Hitbox DESATIVADO pelo toggle")
         self:Stop()
     end
 end
 
--- Aimbot
+-- Aimbot (simplificado)
 local Aimbot = {}
 Aimbot.Target = nil
 
 function Aimbot:GetTarget()
     local ball = Utils:GetBall()
-    
     if not ball then return nil end
-    
-    if not Utils:IsInFOV(ball.Position, Config.AimbotFOV) then
-        return nil
-    end
-    
+    if not Utils:IsInFOV(ball.Position, Config.AimbotFOV) then return nil end
     return ball
 end
 
 function Aimbot:AimAt(target)
     if not target then return end
-    
     local rootPart = Utils:GetRootPart()
     if not rootPart then return end
     
     local targetPos = target.Position
-    
     if Config.AimbotPrediction then
         local predictedPos = Utils:PredictBallPosition(target, 0.2)
-        if predictedPos then
-            targetPos = predictedPos
-        end
+        if predictedPos then targetPos = predictedPos end
     end
     
     local direction = (targetPos - rootPart.Position).Unit
     local targetCFrame = CFrame.new(rootPart.Position, rootPart.Position + direction)
-    
     local currentCFrame = rootPart.CFrame
     local smoothedCFrame = currentCFrame:Lerp(targetCFrame, Config.AimbotSmoothing)
-    
     rootPart.CFrame = CFrame.new(rootPart.Position) * (smoothedCFrame - smoothedCFrame.Position)
 end
 
 function Aimbot:Update()
     if not Config.AimbotEnabled then return end
-    
     self.Target = self:GetTarget()
-    
-    if self.Target then
-        self:AimAt(self.Target)
-    end
+    if self.Target then self:AimAt(self.Target) end
 end
 
--- Auto Features
+-- Auto Features (simplificado)
 local Auto = {}
 
 function Auto:Serve()
     if not Config.AutoServeEnabled then return end
-    
     Utils:HumanWait()
-    
-    local args = {
-        [1] = "Serve"
-    }
-    
     pcall(function()
-        local remote = ReplicatedStorage:FindFirstChild("ServeRemote") or
-                      ReplicatedStorage:FindFirstChild("Serve")
-        
-        if remote and remote:IsA("RemoteEvent") then
-            remote:FireServer(unpack(args))
-        end
+        local remote = ReplicatedStorage:FindFirstChild("ServeRemote") or ReplicatedStorage:FindFirstChild("Serve")
+        if remote and remote:IsA("RemoteEvent") then remote:FireServer("Serve") end
     end)
 end
 
 function Auto:Block()
     if not Config.AutoBlockEnabled then return end
-    
     local ball = Utils:GetBall()
     if not ball then return end
-    
     local rootPart = Utils:GetRootPart()
     if not rootPart then return end
-    
     local distance = (ball.Position - rootPart.Position).Magnitude
-    
     if distance < 15 then
         wait(Config.AutoBlockTiming)
-        
         pcall(function()
-            local remote = ReplicatedStorage:FindFirstChild("BlockRemote") or
-                          ReplicatedStorage:FindFirstChild("Block")
-            
-            if remote and remote:IsA("RemoteEvent") then
-                remote:FireServer()
-            end
+            local remote = ReplicatedStorage:FindFirstChild("BlockRemote") or ReplicatedStorage:FindFirstChild("Block")
+            if remote and remote:IsA("RemoteEvent") then remote:FireServer() end
         end)
     end
 end
@@ -404,26 +417,20 @@ end
 -- Anti-AFK
 local function setupAntiAFK()
     if not Config.AntiAFK then return end
-    
     local getconnections = getconnections or get_signal_cons
     if getconnections then
         for i, v in pairs(getconnections(LocalPlayer.Idled)) do
-            if v["Disable"] then
-                v["Disable"](v)
-            elseif v["Disconnect"] then
-                v["Disconnect"](v)
-            end
+            if v["Disable"] then v["Disable"](v)
+            elseif v["Disconnect"] then v["Disconnect"](v) end
         end
-        print("✅ Anti-AFK ativado (Napoleon Style)")
+        print("✅ [DEBUG] Anti-AFK ativado (getconnections)")
     else
         local VirtualUser = game:GetService("VirtualUser")
-        
         LocalPlayer.Idled:Connect(function()
             VirtualUser:CaptureController()
             VirtualUser:ClickButton2(Vector2.new())
         end)
-        
-        print("✅ Anti-AFK ativado (VirtualUser)")
+        print("✅ [DEBUG] Anti-AFK ativado (VirtualUser)")
     end
 end
 
@@ -431,13 +438,8 @@ end
 local function mainLoop()
     spawn(function()
         while wait(0.05) do
-            if Config.AimbotEnabled then
-                pcall(function()
-                    Aimbot:Update()
-                end)
-            else
-                wait(0.5)
-            end
+            if Config.AimbotEnabled then pcall(function() Aimbot:Update() end)
+            else wait(0.5) end
         end
     end)
     
@@ -445,16 +447,10 @@ local function mainLoop()
         while wait(2) do
             if Config.BallESPEnabled or Config.PlayerESPEnabled then
                 pcall(function()
-                    if Config.BallESPEnabled then
-                        ESP:UpdateBallESP()
-                    end
-                    if Config.PlayerESPEnabled then
-                        ESP:UpdatePlayerESP()
-                    end
+                    if Config.BallESPEnabled then ESP:UpdateBallESP() end
+                    if Config.PlayerESPEnabled then ESP:UpdatePlayerESP() end
                 end)
-            else
-                wait(3)
-            end
+            else wait(3) end
         end
     end)
     
@@ -462,20 +458,14 @@ local function mainLoop()
         while wait(1) do
             if Config.AutoServeEnabled or Config.AutoBlockEnabled then
                 pcall(function()
-                    if Config.AutoServeEnabled then
-                        Auto:Serve()
-                    end
-                    if Config.AutoBlockEnabled then
-                        Auto:Block()
-                    end
+                    if Config.AutoServeEnabled then Auto:Serve() end
+                    if Config.AutoBlockEnabled then Auto:Block() end
                 end)
-            else
-                wait(2)
-            end
+            else wait(2) end
         end
     end)
     
-    print("✅ Loops otimizados iniciados")
+    print("✅ [DEBUG] Loops iniciados")
 end
 
 -- Notificações
@@ -489,18 +479,15 @@ end
 
 -- Inicialização
 local function initialize()
+    print("🔧 [DEBUG] Inicializando...")
     setupAntiAFK()
     mainLoop()
     
-    notify(
-        "Volleyball Legends",
-        "VERSÃO FINAL carregada! Pressione INSERT.",
-        5
-    )
+    notify("Volleyball Legends", "DEBUG MODE ativado! Veja o console (F9)", 5)
     
     print("╔════════════════════════════════════╗")
-    print("║   VERSÃO FINAL - CARREGADO!        ║")
-    print("║   Teleporte direto e agressivo!    ║")
+    print("║   DEBUG MODE - CARREGADO!          ║")
+    print("║   Aperte F9 para ver mensagens!    ║")
     print("╚════════════════════════════════════╝")
 end
 
