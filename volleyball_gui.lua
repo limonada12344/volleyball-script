@@ -359,13 +359,20 @@ end)
 -- Seção: Hitbox
 createSection("📦 HITBOX EXTENDER")
 
-createToggle("Hitbox Extender", "Aumentar área de acerto da bola", Config.HitboxEnabled, function(value)
+createToggle("Hitbox Extender", "Aumentar tamanho físico da bola (método ESP)", Config.HitboxEnabled, function(value)
     Config.HitboxEnabled = value
-    print("Hitbox:", value)
+    if _G.VolleyballHitbox then
+        _G.VolleyballHitbox:Update()
+    end
+    print("Hitbox ESP:", value)
 end)
 
-createSlider("Tamanho", 5, 100, Config.HitboxSize, function(value)
+createSlider("Tamanho", 1, 10, Config.HitboxSize, function(value)
     Config.HitboxSize = value
+    -- Atualizar hitbox se estiver ativo
+    if Config.HitboxEnabled and _G.VolleyballHitbox then
+        _G.VolleyballHitbox:Update()
+    end
 end)
 
 -- Seção: Visual
@@ -406,10 +413,3 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     
     if input.KeyCode == Enum.KeyCode.Insert then
         mainFrame.Visible = not mainFrame.Visible
-    end
-end)
-
--- Mostrar GUI
-mainFrame.Visible = true
-
-print("✅ GUI carregada! Pressione INSERT para abrir/fechar")
